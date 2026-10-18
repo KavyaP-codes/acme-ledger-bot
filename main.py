@@ -15,19 +15,12 @@ client = OpenAI(
 )
 
 class QueryRequest(BaseModel):
-    question: str
+    question: str = None
 
-@app.get("/")
-async def health_check():
-    return {"status": "running"}
-
-@app.post("/")
-async def answer_question(request: Request, body: QueryRequest):
+@app.api_route("/{path_name:path}", methods=["GET", "POST"])
+async def catch_all(request: Request, path_name: str = ""):
     try:
-        # Capture the query parameters (like quizSign) sent by the grader
         query_params = dict(request.query_params)
-        
-        # Build the exact data URL required for your account
         params = {
             "email": EMAIL,
             "questionId": QUESTION_ID,
@@ -36,15 +29,28 @@ async def answer_question(request: Request, body: QueryRequest):
         }
         
         data_url = "https://exam.sanand.workers.dev/questionData"
-        
         async with httpx.AsyncClient() as client_http:
             response = await client_http.get(data_url, params=params)
             
-            # If the exam platform sends a test handshake without a question body or expects validation
+            # If it's just a GET verification probe from the platform
+            if request.method == "GET":
+                if response.status_code == 200:
+                    return {"status": "authorized", "message": "OK"}
+                raise HTTPException(status_code=response.status_code, detail="Unauthorized")
+            
+            # If it's a POST request with a question
             if response.status_code != 200:
-                raise HTTPException(status_code=response.status_code, detail=f"Unauthorized or failed to fetch data: {response.text}")
-                
+                raise HTTPException(status_code=500, detail=f"Failed to fetch ledger data: {response.text}")
             ledger_data = response.json()
+        
+        # Parse incoming body if available
+        body_data = {}
+        try:
+            body_data = await request.json()
+        except Exception:
+            pass
+            
+        question = body_data.get("question", "Summarize the ledger data.")
         
         prompt = f"""
 You are a precise data analyst assistant for Acme Appliances.
@@ -58,7 +64,7 @@ Rules:
 - Product names must match the API's spelling exactly.
 - Reply with the direct answer or a JSON response containing the answer.
 
-Question: {body.question}
+Question: {question}
 """
         
         completion = client.chat.completions.create(
