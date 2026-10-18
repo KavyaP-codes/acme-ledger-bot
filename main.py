@@ -11,9 +11,10 @@ QUESTION_ID = "q-ledger-agent-server"
 BASE_DATA_URL = f"https://exam.sanand.workers.dev/questionData?email={EMAIL}&quizSign=&questionId={QUESTION_ID}&path="
 
 client = OpenAI(
-    base_url="https://aiproxy.sanand.workers.dev/openai/v1",
+    base_url="https://aipipe.org/openai/v1",
     api_key=os.environ.get("AIPROXY_TOKEN")
 )
+
 
 class QueryRequest(BaseModel):
     question: str
