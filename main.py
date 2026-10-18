@@ -1,6 +1,6 @@
 import os
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from openai import OpenAI
 
@@ -8,28 +8,29 @@ app = FastAPI()
 
 EMAIL = "22f3002628@ds.study.iitm.ac.in"
 QUESTION_ID = "q-ledger-agent-server"
-BASE_DATA_URL = f"https://exam.sanand.workers.dev/questionData?email={EMAIL}&quizSign=&questionId={QUESTION_ID}&path="
 
 client = OpenAI(
     base_url="https://aipipe.org/openai/v1",
     api_key=os.environ.get("AIPROXY_TOKEN")
 )
 
-
 class QueryRequest(BaseModel):
     question: str
 
-async def fetch_ledger_data(path: str = ""):
-    async with httpx.AsyncClient() as client_http:
-        response = await client_http.get(BASE_DATA_URL + path)
-        if response.status_code != 200:
-            raise HTTPException(status_code=500, detail="Failed to fetch ledger data.")
-        return response.json()
-
 @app.post("/")
-async def answer_question(body: QueryRequest):
+async def answer_question(request: Request, body: QueryRequest):
     try:
-        ledger_data = await fetch_ledger_data()
+        # Capture the quizSign sent dynamically by the exam grader
+        quiz_sign = request.query_params.get("quizSign", "")
+        
+        # Construct the authorized data URL
+        data_url = f"https://exam.sanand.workers.dev/questionData?email={EMAIL}&quizSign={quiz_sign}&questionId={QUESTION_ID}&path=/"
+        
+        async with httpx.AsyncClient() as client_http:
+            response = await client_http.get(data_url)
+            if response.status_code != 200:
+                raise HTTPException(status_code=500, detail=f"Failed to fetch ledger data: {response.text}")
+            ledger_data = response.json()
         
         prompt = f"""
 You are a precise data analyst assistant for Acme Appliances.
